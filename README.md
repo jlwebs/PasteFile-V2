@@ -1,5 +1,6 @@
 # PasteFile Plugin for x32dbg
 A robust plugin for x32dbg that allows users to paste binary file contents directly into the debugger's memory.
+for example , you export a .bin file from .text section of memory , you can use this plugin to paste it back to memory. normally used to diffrent virant version of same base PE file.
 
 ## Features
 - **Direct Memory Patching**: Load any binary file and write it to the debugged process's memory.
@@ -11,7 +12,7 @@ A robust plugin for x32dbg that allows users to paste binary file contents direc
 
 **Syntax**:
 ```text
-PasteFile <filename> [address]
+PasteFile <filename>,[address]
 ```
 
 **Examples**:
@@ -23,7 +24,7 @@ PasteFile <filename> [address]
 
 - **Specify Address**:
   ```text
-  PasteFile C:\Path\To\shellcode.bin 00401000
+  PasteFile C:\Path\To\shellcode.bin,00401000
   ```
   *(Pastes content starting at 0x401000)*
 
