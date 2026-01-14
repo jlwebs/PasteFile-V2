@@ -34,88 +34,111 @@ static bool ReadAllData(const std::string &fileName,
 
 static bool cbCommand(int argc, char *argv[]) {
   if (argc < 2) {
-    _plugin_logputs("[" PLUGIN_NAME "] Usage: PasteFile <filename>,[address]");
+    _plugin_logputs("[" PLUGIN_NAME
+                    "] Usage: PasteFile <filename>,[address] [end_address]");
     return false;
   }
 
+  _plugin_logprintf("[" PLUGIN_NAME "] Command args count: %d\n", argc);
+  for (int k = 0; k < argc; k++)
+    _plugin_logprintf("Arg%d: '%s'\n", k, argv[k]);
+
+  char *filename = argv[1];
+  char *addrStr = nullptr;
+  char *endAddrStr = nullptr;
+
+  if (argc == 2) {
+    // Try to split by comma: file,addr[,end]
+    char *comma = strchr(argv[1], ',');
+    if (comma) {
+      *comma = 0;
+      filename = argv[1];
+      addrStr = comma + 1;
+
+      char *comma2 = strchr(addrStr, ',');
+      if (comma2) {
+        *comma2 = 0;
+        endAddrStr = comma2 + 1;
+      }
+      _plugin_logprintf("[" PLUGIN_NAME "] Detected comma-separated args.\n");
+    }
+    // Fallback: check for space (if user quoted "file addr")
+    else {
+      char *space = strrchr(argv[1], ' ');
+      if (space) {
+        *space = 0;
+        filename = argv[1];
+        addrStr = space + 1;
+      }
+    }
+  } else {
+    // Standard argv parsing: PasteFile file [addr] [end]
+    if (argc > 2)
+      addrStr = argv[2];
+    if (argc > 3)
+      endAddrStr = argv[3];
+  }
+
   std::vector<uint8_t> data;
-  if (!ReadAllData(argv[1], data)) {
-    _plugin_logputs("[" PLUGIN_NAME "] Failed to read file data!");
+  if (!ReadAllData(filename, data)) {
+    _plugin_logprintf("[" PLUGIN_NAME "] Failed to read file.\n");
+    _plugin_logprintf("Target File: \"%s\"\n", filename);
     return false;
   }
 
   duint start = 0;
-  if (argc > 2) {
-    // Try to parse the second argument as an address/expression
-    start = DbgValFromString(argv[2]);
-    if (start == 0 && strcmp(argv[2], "0") != 0 &&
-        strcmp(argv[2], "0x0") !=
-            0) // Basic validation if DbgValFromString returns 0 on failure
-    {
-      // DbgValFromString returns 0 on failure usually, but 0 is also a valid
-      // address. However, if the user typed something invalid, it might be
-      // safer to fallback or error. Let's assume user knows what they are doing
-      // if they provide an arg. Or we can check if it really failed. A safe way
-      // is to check if DbgValFromString returns 0 and the string is not "0".
-    }
+  if (addrStr) {
+    start = DbgValFromString(addrStr);
     _plugin_logprintf("[" PLUGIN_NAME "] Using provided address: %p\n", start);
   } else {
     start = Script::Gui::Dump::SelectionGetStart();
     _plugin_logprintf("[" PLUGIN_NAME "] Using Dump selection start: %p\n",
                       start);
   }
-  duint total = data.size();
-  duint skipped = 0;
-  duint patched = 0;
-  duint failed = 0;
 
-  _plugin_logprintf("[" PLUGIN_NAME
-                    "] Starting patch at %p, size: %d bytes...\n",
-                    start, total);
+  duint endLimit = (duint)-1;
+  if (endAddrStr) {
+    endLimit = DbgValFromString(endAddrStr);
+    _plugin_logprintf("[" PLUGIN_NAME "] Using ending limit: %p\n", endLimit);
+  }
+  duint size = data.size();
+  duint truncatedBytes = 0;
 
-  for (size_t i = 0; i < total; i++) {
-    duint addr = start + i;
-    uint8_t currentByte;
-
-    // Try to read current memory
-    // Try to read current memory
-    if (!Script::Memory::IsValidPtr(addr)) {
+  if (endLimit != (duint)-1 && (start + size) > endLimit) {
+    if (start >= endLimit) {
       _plugin_logprintf(
           "[" PLUGIN_NAME
-          "] Failed to read memory at %p. Aborting remaining %d bytes.\n",
-          addr, total - i);
-      failed += (total - i);
-      break;
+          "] Start address %p is beyond end limit %p. Nothing to patch.\n",
+          start, endLimit);
+      return true;
     }
-    currentByte = Script::Memory::ReadByte(addr);
-
-    // Compare
-    if (currentByte == data[i]) {
-      skipped++;
-      continue;
-    }
-
-    // Try to write
-    if (Script::Memory::WriteByte(addr, data[i])) {
-      patched++;
-    } else {
-      _plugin_logprintf("[" PLUGIN_NAME
-                        "] Failed to write byte at %p (Old: %02X, New: %02X)\n",
-                        addr, currentByte, data[i]);
-      failed++;
-    }
+    duint newSize = endLimit - start;
+    truncatedBytes = size - newSize;
+    size = newSize;
+    _plugin_logprintf(
+        "[" PLUGIN_NAME
+        "] Truncating patch size from %d to %d bytes (Limit: %p)\n",
+        data.size(), size, endLimit);
   }
 
-  _plugin_logprintf("[" PLUGIN_NAME "] Patch finished.\n");
-  _plugin_logprintf("[" PLUGIN_NAME "] Total:   %d\n", total);
-  _plugin_logprintf("[" PLUGIN_NAME "] Skipped: %d (Same content)\n", skipped);
-  _plugin_logprintf("[" PLUGIN_NAME "] Patched: %d\n", patched);
-  _plugin_logprintf("[" PLUGIN_NAME "] Failed:  %d\n", failed);
+  _plugin_logprintf("[" PLUGIN_NAME "] Patching %d bytes at %p...\n", size,
+                    start);
 
-  if (failed > 0)
+  if (DbgFunctions()->MemPatch(start, data.data(), size)) {
+    _plugin_logprintf("[" PLUGIN_NAME "] Patch successful!\n");
+    if (truncatedBytes > 0)
+      _plugin_logprintf("[" PLUGIN_NAME "] Warning: %d bytes were truncated.\n",
+                        truncatedBytes);
+  } else {
     _plugin_logputs(
         "[" PLUGIN_NAME
-        "] Some bytes failed to write. Check memory permissions/validity.");
+        "] Patch failed! (DbgFunctions()->MemPatch returned false)");
+    if (endLimit == (duint)-1) {
+      _plugin_logputs("[" PLUGIN_NAME
+                      "] Note: No end address was specified. The patch might "
+                      "have attempted to write to invalid memory.");
+    }
+  }
 
   GuiUpdateAllViews();
   return true;

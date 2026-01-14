@@ -56,7 +56,6 @@ This project has been updated and verified to build successfully in the followin
 ## Troubleshooting
 - **Plugin not loading?**
   Ensure you are using the 32-bit version of the plugin (`.dp32`) with x32dbg.
-- **"Memory patch failed"**?
-  Check if the target memory address is writable. The plugin attempts to write byte-by-byte and reports failures.
-- **File not found?**
-  Use absolute paths (e.g., `C:\temp\file.bin`) to avoid ambiguity.
+- **"Patch failed!" with no end address?**
+  If you do not specify an `end_address` and the file content is larger than the valid memory region (e.g., exceeds the current section), the **entire patch operation will be aborted** by the debugger kernel to prevent corruption. Nothing will be written.
+  **Recommendation**: Always specify the `end_address` (3rd argument). This enables the plugin to safely **truncate** the data and write only what fits into the target range.
