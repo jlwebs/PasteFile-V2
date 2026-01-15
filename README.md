@@ -8,7 +8,10 @@ for example , you export a .bin file from .text section of memory , you can use 
 - **Detailed Feedback**: Provides byte-level statistics (Skipped/Patched/Failed) and error reporting.
 
 ## Usage
-**Command**: `PasteFile`
+**Commands**: `PasteFile`, `CopyIN`, `PasteOut`
+
+### 1. PasteFile
+Directly paste a file's content to memory.
 
 **Syntax**:
 ```text
@@ -20,13 +23,49 @@ PasteFile <filename>,[address]
   ```text
   PasteFile C:\Path\To\shellcode.bin
   ```
-  *(Pastes content starting at the current address selected in the Dump view)*
-
 - **Specify Address**:
   ```text
   PasteFile C:\Path\To\shellcode.bin,00401000
   ```
-  *(Pastes content starting at 0x401000)*
+
+### 2. CopyIN & PasteOut (Two-Step Patching)
+Useful for extracting a specific chunk from a binary file (e.g., a memory dump) and pasting it elsewhere.
+
+#### CopyIN
+Reads a segment from a binary file into an internal memory buffer.
+
+**Syntax**:
+```text
+CopyIN <filename>,<begin_attr>,<end_attr>,[base]
+```
+- **begin_attr / end_attr**: Virtual addresses defining the range to copy.
+- **base**: The base address of the file (default: `401000`). Used to calculate file offsets (`offset = attr - base`).
+
+**Example**:
+```text
+CopyIN C:\Dump.bin, 401000, 402000
+```
+*(Reads data corresponding to 401000-402000 from Dump.bin. If base is not provided, you will be prompted to confirm default 401000.)*
+
+#### PasteOut
+Pastes the data currently stored in the internal buffer to memory.
+
+**Syntax**:
+```text
+PasteOut [begin_attr]
+```
+
+**Examples**:
+- **Paste to Cursor**:
+  ```text
+  PasteOut
+  ```
+  *(Pastes to the current address selected in the CPU Disassembly view)*
+
+- **Paste to Specific Address**:
+  ```text
+  PasteOut 405000
+  ```
 
 *Note: Ensure you use absolute paths for the filename.*
 
