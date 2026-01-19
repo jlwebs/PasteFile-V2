@@ -126,9 +126,12 @@ static bool cbCommand(int argc, char *argv[]) {
 
   if (DbgFunctions()->MemPatch(start, data.data(), size)) {
     _plugin_logprintf("[" PLUGIN_NAME "] Patch successful!\n");
-    if (truncatedBytes > 0)
+    if (truncatedBytes > 0) {
       _plugin_logprintf("[" PLUGIN_NAME "] Warning: %d bytes were truncated.\n",
                         truncatedBytes);
+      _plugin_logprintf("[" PLUGIN_NAME "] Fail Zone (Truncated): %p - %p\n",
+                        endLimit, endLimit + truncatedBytes);
+    }
   } else {
     _plugin_logputs(
         "[" PLUGIN_NAME
